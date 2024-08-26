@@ -104,12 +104,27 @@ def interests_assessment():
     st.title("관심사 조사")
     st.write("여러분의 관심사에 대해 알려주세요.")
     
-    interests = st.multiselect("관심 있는 분야를 모두 선택해주세요", 
-                               ["국어", "수학", "영어", "과학", "사회", "음악", "미술", "체육", "기술가정", "한국사"])
+    # 세션 상태에 interests가 없으면 빈 리스트로 초기화
+    if 'interests' not in st.session_state:
+        st.session_state.interests = []
     
+    # multiselect 위젯에 현재 선택된 관심사를 기본값으로 설정
+    interests = st.multiselect(
+        "관심 있는 분야를 모두 선택해주세요",
+        ["국어", "수학", "영어", "과학", "사회", "음악", "미술", "체육", "기술가정", "한국사"],
+        default=st.session_state.interests
+    )
+    
+    # 선택된 관심사를 세션 상태에 저장
+    st.session_state.interests = interests
+    
+    # 다음 버튼을 누를 때만 다음 페이지로 이동
     if st.button("다음"):
-        st.session_state.student_data['interests'] = ", ".join(interests)
-        st.session_state.page = 'skills'
+        if interests:  # 최소 하나의 관심사가 선택되었는지 확인
+            st.session_state.student_data['interests'] = ", ".join(interests)
+            st.session_state.page = 'skills'
+        else:
+            st.warning("최소 하나의 관심사를 선택해주세요.")    
 
 def skills_assessment():
     st.title("기술 평가")
