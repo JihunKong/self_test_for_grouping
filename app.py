@@ -10,21 +10,14 @@ conn = sqlite3.connect('student_assessments.db')
 c = conn.cursor()
 
 # 테이블 생성
-c.execute('''CREATE TABLE IF NOT EXISTS students
+c.execute('''CREATE TABLE IF NOT EXISTS grades
              (id INTEGER PRIMARY KEY AUTOINCREMENT,
-              student_id TEXT UNIQUE NOT NULL,
-              name TEXT NOT NULL,
-              class INTEGER NOT NULL,
-              number INTEGER NOT NULL,
-              learning_style TEXT,
-              mbti_type TEXT,
-              interests TEXT,
-              collaboration_skill INTEGER,
-              digital_literacy INTEGER,
-              created_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
+              student_id TEXT NOT NULL,
+              subject TEXT NOT NULL,
+              score REAL NOT NULL,
+              FOREIGN KEY (student_id) REFERENCES students(student_id))''')
 
 conn.commit()
-
 def init_session_state():
     if 'page' not in st.session_state:
         st.session_state.page = 'intro'
@@ -171,14 +164,35 @@ def result_page():
 def admin_page():
     st.title("관리자 페이지")
     
+    st.subheader("성적 입력")
+    student_id = st.text_input("학생 ID (예: 10315)")
+    subject = st.selectbox("과목", ["국어", "수학", "영어", "과학", "사회", "음악", "미술", "체육", "기술가정", "한국사"])
+    score = st.number_input("점수", min_value=0, max_value=100, step=1)
+    
+    if st.button("성적 입력"):
+        if student_id and subject and score:
+            c.execute("SELECT * FROM students WHERE student_id = ?", (student_id,))
+            if c.fetchone():
+                c.execute("INSERT INTO grades (student_id, subject, score) VALUES (?, ?, ?)",
+                          (student_id, subject, score))
+                conn.commit()
+                st.success(f"{student_id} 학생의 {subject} 성적 {score}점이 입력되었습니다.")
+            else:
+                st.error("존재하지 않는 학생 ID입니다.")
+        else:
+            st.error("모든 필드를 입력해주세요.")
+    
     st.subheader("전체 학생 데이터")
-    c.execute("""SELECT student_id, name, class, number, learning_style, mbti_type, 
-                        interests, collaboration_skill, digital_literacy
-                 FROM students""")
+    c.execute("""SELECT s.student_id, s.name, s.class, s.number, s.learning_style, s.mbti_type, 
+                        s.interests, s.collaboration_skill, s.digital_literacy,
+                        GROUP_CONCAT(g.subject || ':' || g.score, ', ') as grades
+                 FROM students s
+                 LEFT JOIN grades g ON s.student_id = g.student_id
+                 GROUP BY s.student_id""")
     data = c.fetchall()
     if data:
         df = pd.DataFrame(data, columns=['학생ID', '이름', '학급', '번호', '학습스타일', 'MBTI', '관심사', 
-                                         '협업능력', '디지털리터러시'])
+                                         '협업능력', '디지털리터러시', '성적'])
         st.dataframe(df)
         
         # Excel 파일로 다운로드
@@ -189,7 +203,7 @@ def admin_page():
         st.download_button(
             label="Excel 파일 다운로드",
             data=output.getvalue(),
-            file_name="student_data.xlsx",
+            file_name="student_data_with_grades.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
     else:
