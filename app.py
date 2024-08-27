@@ -18,11 +18,14 @@ c.execute('''CREATE TABLE IF NOT EXISTS grades
               FOREIGN KEY (student_id) REFERENCES students(student_id))''')
 
 conn.commit()
+
 def init_session_state():
     if 'page' not in st.session_state:
         st.session_state.page = 'intro'
     if 'student_data' not in st.session_state:
         st.session_state.student_data = {}
+    if 'admin_authenticated' not in st.session_state:
+        st.session_state.admin_authenticated = False
 
 def generate_student_id(class_num, student_num):
     return f"1{class_num:02d}{student_num:02d}"
@@ -31,21 +34,21 @@ def intro_page():
     st.title("1학년 학생 사전 조사")
     st.write("이 조사는 여러분의 학습 스타일, 성격 유형, 관심사 등을 파악하여 모둠 편성에 활용하기 위한 것입니다.")
     st.write("모든 질문에 정직하게 답변해 주시기 바랍니다.")
-    
+
     class_num = st.selectbox("학급을 선택해주세요", list(range(1, 8)))
     student_num = st.number_input("번호를 입력해주세요", min_value=1, max_value=26, step=1)
     name = st.text_input("이름을 입력해주세요")
-    
+
     if st.button("시작하기") and name and class_num and student_num:
         student_id = generate_student_id(class_num, student_num)
         st.session_state.student_data['student_id'] = student_id
         st.session_state.student_data['name'] = name
         st.session_state.student_data['class'] = class_num
         st.session_state.student_data['number'] = student_num
-        
+
         c.execute("SELECT * FROM students WHERE student_id = ?", (student_id,))
         existing_student = c.fetchone()
-        
+
         if existing_student:
             st.warning("이미 조사를 완료한 학생입니다. 기존 데이터를 업데이트합니다.")
             st.session_state.page = 'learning_style'
@@ -58,7 +61,7 @@ def intro_page():
 def learning_style_assessment():
     st.title("학습 스타일 평가")
     st.write("다음 질문들에 답하여 여러분의 학습 스타일을 파악해봅시다.")
-    
+
     q1 = st.radio("1. 새로운 정보를 배울 때, 나는 주로:", 
                   ["그림이나 도표를 보는 것이 도움이 된다", 
                    "설명을 듣는 것이 도움이 된다", 
@@ -67,7 +70,7 @@ def learning_style_assessment():
                   ["필기를 많이 한다", 
                    "선생님의 설명을 주의 깊게 듣는다", 
                    "움직이거나 무언가를 만지작거린다"])
-    
+
     if st.button("다음"):
         if q1.startswith("그림") and q2.startswith("필기"):
             learning_style = "시각적"
@@ -75,19 +78,19 @@ def learning_style_assessment():
             learning_style = "청각적"
         else:
             learning_style = "운동감각적"
-        
+
         st.session_state.student_data['learning_style'] = learning_style
         st.session_state.page = 'mbti'
 
 def mbti_assessment():
     st.title("MBTI 성격 유형 검사")
     st.write("다음 질문들에 답하여 여러분의 MBTI 성격 유형을 파악해봅시다.")
-    
+
     e_i = st.radio("1. 나는 주로:", ["사람들과 어울리는 것을 좋아한다 (E)", "혼자 있는 시간을 즐긴다 (I)"])
     s_n = st.radio("2. 나는 주로:", ["구체적인 사실에 집중한다 (S)", "가능성과 의미를 찾는다 (N)"])
     t_f = st.radio("3. 결정을 내릴 때 나는 주로:", ["논리와 사실에 기반한다 (T)", "감정과 가치에 기반한다 (F)"])
     j_p = st.radio("4. 나는 주로:", ["계획을 세우고 그대로 실행한다 (J)", "상황에 따라 유연하게 대처한다 (P)"])
-    
+
     if st.button("다음"):
         mbti = (e_i[-2] + s_n[-2] + t_f[-2] + j_p[-2])
         st.session_state.student_data['mbti_type'] = mbti
@@ -96,24 +99,20 @@ def mbti_assessment():
 def interests_assessment():
     st.title("관심사 조사")
     st.write("여러분의 관심사에 대해 알려주세요.")
-    
-    # 세션 상태에 interests가 없으면 빈 리스트로 초기화
+
     if 'interests' not in st.session_state:
         st.session_state.interests = []
-    
-    # multiselect 위젯에 현재 선택된 관심사를 기본값으로 설정
+
     interests = st.multiselect(
         "관심 있는 분야를 모두 선택해주세요",
         ["국어", "수학", "영어", "과학", "사회", "음악", "미술", "체육", "기술가정", "한국사"],
         default=st.session_state.interests
     )
-    
-    # 선택된 관심사를 세션 상태에 저장
+
     st.session_state.interests = interests
-    
-    # 다음 버튼을 누를 때만 다음 페이지로 이동
+
     if st.button("다음"):
-        if interests:  # 최소 하나의 관심사가 선택되었는지 확인
+        if interests:
             st.session_state.student_data['interests'] = ", ".join(interests)
             st.session_state.page = 'skills'
         else:
@@ -122,10 +121,10 @@ def interests_assessment():
 def skills_assessment():
     st.title("기술 평가")
     st.write("여러분의 협업 능력과 디지털 리터러시를 평가해봅시다.")
-    
+
     collaboration = st.slider("1에서 5까지, 여러분의 협업 능력을 어떻게 평가하시나요?", 1, 5, 3)
     digital_literacy = st.slider("1에서 5까지, 여러분의 디지털 기기 활용 능력을 어떻게 평가하시나요?", 1, 5, 3)
-    
+
     if st.button("완료"):
         st.session_state.student_data['collaboration_skill'] = collaboration
         st.session_state.student_data['digital_literacy'] = digital_literacy
@@ -152,68 +151,89 @@ def result_page():
     st.write(f"관심사: {data['interests']}")
     st.write(f"협업 능력: {data['collaboration_skill']}")
     st.write(f"디지털 리터러시: {data['digital_literacy']}")
-    
+
     save_assessment_data()
-    
+
     st.success("조사가 완료되었습니다. 결과가 저장되었습니다.")
-    
+
     if st.button("처음으로"):
         st.session_state.page = 'intro'
         st.session_state.student_data = {}
 
-def admin_page():
-    st.title("관리자 페이지")
-    
-    st.subheader("성적 입력")
-    student_id = st.text_input("학생 ID (예: 10315)")
-    subject = st.selectbox("과목", ["국어", "수학", "영어", "과학", "사회", "음악", "미술", "체육", "기술가정", "한국사"])
-    score = st.number_input("점수", min_value=0, max_value=100, step=1)
-    
-    if st.button("성적 입력"):
-        if student_id and subject and score:
-            c.execute("SELECT * FROM students WHERE student_id = ?", (student_id,))
-            if c.fetchone():
-                c.execute("INSERT INTO grades (student_id, subject, score) VALUES (?, ?, ?)",
-                          (student_id, subject, score))
-                conn.commit()
-                st.success(f"{student_id} 학생의 {subject} 성적 {score}점이 입력되었습니다.")
-            else:
-                st.error("존재하지 않는 학생 ID입니다.")
+def verify_password(password):
+    # 실제 구현에서는 보다 안전한 방법으로 비밀번호를 저장하고 검증해야 합니다
+    return hashlib.sha256(password.encode()).hexdigest() == "5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8"
+
+def admin_login():
+    st.title("관리자 로그인")
+    password = st.text_input("비밀번호를 입력하세요", type="password")
+    if st.button("로그인"):
+        if verify_password(password):
+            st.session_state.admin_authenticated = True
+            st.success("로그인 성공!")
+            st.experimental_rerun()
         else:
-            st.error("모든 필드를 입력해주세요.")
-    
-    st.subheader("전체 학생 데이터")
-    c.execute("""SELECT s.student_id, s.name, s.class, s.number, s.learning_style, s.mbti_type, 
-                        s.interests, s.collaboration_skill, s.digital_literacy,
-                        GROUP_CONCAT(g.subject || ':' || g.score, ', ') as grades
-                 FROM students s
-                 LEFT JOIN grades g ON s.student_id = g.student_id
-                 GROUP BY s.student_id""")
-    data = c.fetchall()
-    if data:
-        df = pd.DataFrame(data, columns=['학생ID', '이름', '학급', '번호', '학습스타일', 'MBTI', '관심사', 
-                                         '협업능력', '디지털리터러시', '성적'])
-        st.dataframe(df)
-        
-        # Excel 파일로 다운로드
-        output = BytesIO()
-        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-            df.to_excel(writer, index=False, sheet_name='학생데이터')
-        
-        st.download_button(
-            label="Excel 파일 다운로드",
-            data=output.getvalue(),
-            file_name="student_data_with_grades.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
+            st.error("비밀번호가 올바르지 않습니다.")
+
+def admin_page():
+    if not st.session_state.get('admin_authenticated', False):
+        admin_login()
     else:
-        st.info("등록된 학생 데이터가 없습니다.")
+        st.title("관리자 페이지")
+
+        st.subheader("성적 입력")
+        student_id = st.text_input("학생 ID (예: 10315)")
+        subject = st.selectbox("과목", ["국어", "수학", "영어", "과학", "사회", "음악", "미술", "체육", "기술가정", "한국사"])
+        score = st.number_input("점수", min_value=0, max_value=100, step=1)
+
+        if st.button("성적 입력"):
+            if student_id and subject and score:
+                c.execute("SELECT * FROM students WHERE student_id = ?", (student_id,))
+                if c.fetchone():
+                    c.execute("INSERT INTO grades (student_id, subject, score) VALUES (?, ?, ?)",
+                              (student_id, subject, score))
+                    conn.commit()
+                    st.success(f"{student_id} 학생의 {subject} 성적 {score}점이 입력되었습니다.")
+                else:
+                    st.error("존재하지 않는 학생 ID입니다.")
+            else:
+                st.error("모든 필드를 입력해주세요.")
+
+        st.subheader("전체 학생 데이터")
+        c.execute("""SELECT s.student_id, s.name, s.class, s.number, s.learning_style, s.mbti_type, 
+                            s.interests, s.collaboration_skill, s.digital_literacy,
+                            GROUP_CONCAT(g.subject || ':' || g.score, ', ') as grades
+                     FROM students s
+                     LEFT JOIN grades g ON s.student_id = g.student_id
+                     GROUP BY s.student_id""")
+        data = c.fetchall()
+        if data:
+            df = pd.DataFrame(data, columns=['학생ID', '이름', '학급', '번호', '학습스타일', 'MBTI', '관심사', 
+                                             '협업능력', '디지털리터러시', '성적'])
+            st.dataframe(df)
+
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                df.to_excel(writer, index=False, sheet_name='학생데이터')
+
+            st.download_button(
+                label="Excel 파일 다운로드",
+                data=output.getvalue(),
+                file_name="student_data_with_grades.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+        else:
+            st.info("등록된 학생 데이터가 없습니다.")
+
+        if st.button("로그아웃"):
+            st.session_state.admin_authenticated = False
+            st.experimental_rerun()
 
 def main():
     init_session_state()
-    
+
     page = st.sidebar.radio("페이지 선택", ["학생 조사", "관리자 페이지"])
-    
+
     if page == "학생 조사":
         if st.session_state.page == 'intro':
             intro_page()
