@@ -259,3 +259,10 @@ def csv_grade_upload():
             st.success(f"{success_count}개의 성적이 성공적으로 입력되었습니다.")
             if error_count > 0:
                 st.warning(f"{error_count}개의 성적은 존재하지 않는 학생 ID로 인해 입력되지 않았습니다.")
+        except Exception as e:
+            st.error(f"파일 처리 중 오류가 발생했습니다: {e}")
+
+def display_student_data():
+    st.subheader("전체 학생 데이터")
+    try:
+        c.execute("""SELECT s.student_id,
