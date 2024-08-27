@@ -1,3 +1,4 @@
+import os
 import streamlit as st
 import pandas as pd
 import sqlite3
@@ -5,11 +6,29 @@ from datetime import datetime
 import hashlib
 from io import BytesIO
 
+# 데이터베이스 파일 경로 설정
+DB_DIR = os.path.join(os.path.expanduser('~'), '.student_assessment_data')
+DB_FILE = os.path.join(DB_DIR, 'student_assessments.db')
+
+# 디렉토리가 없으면 생성
+os.makedirs(DB_DIR, exist_ok=True)
+
 # 데이터베이스 연결
-conn = sqlite3.connect('student_assessments.db')
+conn = sqlite3.connect(DB_FILE)
 c = conn.cursor()
 
 # 테이블 생성
+c.execute('''CREATE TABLE IF NOT EXISTS students
+             (student_id TEXT PRIMARY KEY,
+              name TEXT NOT NULL,
+              class INTEGER NOT NULL,
+              number INTEGER NOT NULL,
+              learning_style TEXT,
+              mbti_type TEXT,
+              interests TEXT,
+              collaboration_skill INTEGER,
+              digital_literacy INTEGER)''')
+
 c.execute('''CREATE TABLE IF NOT EXISTS grades
              (id INTEGER PRIMARY KEY AUTOINCREMENT,
               student_id TEXT NOT NULL,
@@ -182,73 +201,61 @@ def admin_page():
         st.title("관리자 페이지")
 
         st.subheader("성적 입력")
-        student_id = st.text_input("학생 ID (예: 10315)")
-        subject = st.selectbox("과목", ["국어", "수학", "영어", "과학", "사회", "음악", "미술", "체육", "기술가정", "한국사"])
-        score = st.number_input("점수", min_value=0, max_value=100, step=1)
+        input_method = st.radio("입력 방식 선택", ["개별 입력", "CSV 파일 업로드"])
 
-        if st.button("성적 입력"):
-            if student_id and subject and score:
-                c.execute("SELECT * FROM students WHERE student_id = ?", (student_id,))
-                if c.fetchone():
-                    c.execute("INSERT INTO grades (student_id, subject, score) VALUES (?, ?, ?)",
-                              (student_id, subject, score))
-                    conn.commit()
-                    st.success(f"{student_id} 학생의 {subject} 성적 {score}점이 입력되었습니다.")
-                else:
-                    st.error("존재하지 않는 학생 ID입니다.")
-            else:
-                st.error("모든 필드를 입력해주세요.")
-
-        st.subheader("전체 학생 데이터")
-        c.execute("""SELECT s.student_id, s.name, s.class, s.number, s.learning_style, s.mbti_type, 
-                            s.interests, s.collaboration_skill, s.digital_literacy,
-                            GROUP_CONCAT(g.subject || ':' || g.score, ', ') as grades
-                     FROM students s
-                     LEFT JOIN grades g ON s.student_id = g.student_id
-                     GROUP BY s.student_id""")
-        data = c.fetchall()
-        if data:
-            df = pd.DataFrame(data, columns=['학생ID', '이름', '학급', '번호', '학습스타일', 'MBTI', '관심사', 
-                                             '협업능력', '디지털리터러시', '성적'])
-            st.dataframe(df)
-
-            output = BytesIO()
-            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                df.to_excel(writer, index=False, sheet_name='학생데이터')
-
-            st.download_button(
-                label="Excel 파일 다운로드",
-                data=output.getvalue(),
-                file_name="student_data_with_grades.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
+        if input_method == "개별 입력":
+            individual_grade_input()
         else:
-            st.info("등록된 학생 데이터가 없습니다.")
+            csv_grade_upload()
+
+        display_student_data()
 
         if st.button("로그아웃"):
             st.session_state.admin_authenticated = False
             st.rerun()
 
-def main():
-    init_session_state()
+def individual_grade_input():
+    student_id = st.text_input("학생 ID (예: 10315)")
+    subject = st.selectbox("과목", ["국어", "수학", "영어", "과학", "사회", "음악", "미술", "체육", "기술가정", "한국사"])
+    score = st.number_input("점수", min_value=0, max_value=100, step=1)
 
-    page = st.sidebar.radio("페이지 선택", ["학생 조사", "관리자 페이지"])
+    if st.button("성적 입력"):
+        if student_id and subject and score:
+            c.execute("SELECT * FROM students WHERE student_id = ?", (student_id,))
+            if c.fetchone():
+                c.execute("INSERT INTO grades (student_id, subject, score) VALUES (?, ?, ?)",
+                          (student_id, subject, score))
+                conn.commit()
+                st.success(f"{student_id} 학생의 {subject} 성적 {score}점이 입력되었습니다.")
+            else:
+                st.error("존재하지 않는 학생 ID입니다.")
+        else:
+            st.error("모든 필드를 입력해주세요.")
 
-    if page == "학생 조사":
-        if st.session_state.page == 'intro':
-            intro_page()
-        elif st.session_state.page == 'learning_style':
-            learning_style_assessment()
-        elif st.session_state.page == 'mbti':
-            mbti_assessment()
-        elif st.session_state.page == 'interests':
-            interests_assessment()
-        elif st.session_state.page == 'skills':
-            skills_assessment()
-        elif st.session_state.page == 'result':
-            result_page()
-    else:
-        admin_page()
+def csv_grade_upload():
+    st.write("CSV 파일 형식:")
+    st.write("1열: 학번 (student_id)")
+    st.write("2열: 과목 (subject)")
+    st.write("3열: 점수 (score)")
+    st.write("첫 번째 행은 헤더로 처리되므로, 실제 데이터는 2행부터 입력하세요.")
 
-if __name__ == "__main__":
-    main()
+    uploaded_file = st.file_uploader("CSV 파일을 업로드하세요", type="csv")
+    if uploaded_file is not None:
+        try:
+            df = pd.read_csv(uploaded_file, header=0, names=['student_id', 'subject', 'score'])
+            
+            success_count = 0
+            error_count = 0
+            for _, row in df.iterrows():
+                c.execute("SELECT * FROM students WHERE student_id = ?", (row['student_id'],))
+                if c.fetchone():
+                    c.execute("INSERT INTO grades (student_id, subject, score) VALUES (?, ?, ?)",
+                              (row['student_id'], row['subject'], row['score']))
+                    success_count += 1
+                else:
+                    error_count += 1
+
+            conn.commit()
+            st.success(f"{success_count}개의 성적이 성공적으로 입력되었습니다.")
+            if error_count > 0:
+                st.warning(f"{error_count}개의 성적은 존재하지 않는 학생 ID로 인해 입력되지 않았습니다.")
