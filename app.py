@@ -265,4 +265,54 @@ def csv_grade_upload():
 def display_student_data():
     st.subheader("전체 학생 데이터")
     try:
-        c.execute("""SELECT s.student_id,
+        c.execute("""SELECT s.student_id, s.name, s.class, s.number, s.learning_style, s.mbti_type, 
+                            s.interests, s.collaboration_skill, s.digital_literacy,
+                            GROUP_CONCAT(g.subject || ':' || g.score, ', ') as grades
+                     FROM students s
+                     LEFT JOIN grades g ON s.student_id = g.student_id
+                     GROUP BY s.student_id""")
+        data = c.fetchall()
+        if data:
+            df = pd.DataFrame(data, columns=['학생ID', '이름', '학급', '번호', '학습스타일', 'MBTI', '관심사', 
+                                             '협업능력', '디지털리터러시', '성적'])
+            st.dataframe(df)
+
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                df.to_excel(writer, index=False, sheet_name='학생데이터')
+
+            st.download_button(
+                label="Excel 파일 다운로드",
+                data=output.getvalue(),
+                file_name="student_data_with_grades.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+        else:
+            st.info("등록된 학생 데이터가 없습니다.")
+    except sqlite3.Error as e:
+        st.error(f"데이터베이스 오류: {e}")
+        st.info("데이터베이스에 테이블이 없거나 데이터가 비어있을 수 있습니다.")
+
+def main():
+    init_session_state()
+
+    page = st.sidebar.radio("페이지 선택", ["학생 조사", "관리자 페이지"])
+
+    if page == "학생 조사":
+        if st.session_state.page == 'intro':
+            intro_page()
+        elif st.session_state.page == 'learning_style':
+            learning_style_assessment()
+        elif st.session_state.page == 'mbti':
+            mbti_assessment()
+        elif st.session_state.page == 'interests':
+            interests_assessment()
+        elif st.session_state.page == 'skills':
+            skills_assessment()
+        elif st.session_state.page == 'result':
+            result_page()
+    else:
+        admin_page()
+
+if __name__ == "__main__":
+    main()
