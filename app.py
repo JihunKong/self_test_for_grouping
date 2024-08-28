@@ -45,6 +45,8 @@ def init_session_state():
         st.session_state.student_data = {}
     if 'admin_authenticated' not in st.session_state:
         st.session_state.admin_authenticated = False
+    if 'confirm_submit' not in st.session_state:
+        st.session_state.confirm_submit = False
 
 def generate_student_id(class_num, student_num):
     return f"1{class_num:02d}{student_num:02d}"
@@ -58,24 +60,29 @@ def intro_page():
     student_num = st.number_input("번호를 입력해주세요", min_value=1, max_value=26, step=1)
     name = st.text_input("이름을 입력해주세요")
 
-    if st.button("시작하기") and name and class_num and student_num:
-        student_id = generate_student_id(class_num, student_num)
-        st.session_state.student_data['student_id'] = student_id
-        st.session_state.student_data['name'] = name
-        st.session_state.student_data['class'] = class_num
-        st.session_state.student_data['number'] = student_num
+    if st.button("시작하기"):
+        if name and class_num and student_num:
+            if st.button("제출하시겠습니까?"):
+                student_id = generate_student_id(class_num, student_num)
+                st.session_state.student_data['student_id'] = student_id
+                st.session_state.student_data['name'] = name
+                st.session_state.student_data['class'] = class_num
+                st.session_state.student_data['number'] = student_num
 
-        c.execute("SELECT * FROM students WHERE student_id = ?", (student_id,))
-        existing_student = c.fetchone()
+                c.execute("SELECT * FROM students WHERE student_id = ?", (student_id,))
+                existing_student = c.fetchone()
 
-        if existing_student:
-            st.warning("이미 조사를 완료한 학생입니다. 기존 데이터를 업데이트합니다.")
-            st.session_state.page = 'learning_style'
+                if existing_student:
+                    st.warning("이미 조사를 완료한 학생입니다. 기존 데이터를 업데이트합니다.")
+                    st.session_state.page = 'learning_style'
+                else:
+                    c.execute("INSERT INTO students (student_id, name, class, number) VALUES (?, ?, ?, ?)",
+                              (student_id, name, class_num, student_num))
+                    conn.commit()
+                    st.session_state.page = 'learning_style'
+                st.rerun()
         else:
-            c.execute("INSERT INTO students (student_id, name, class, number) VALUES (?, ?, ?, ?)",
-                      (student_id, name, class_num, student_num))
-            conn.commit()
-            st.session_state.page = 'learning_style'
+            st.warning("모든 필드를 입력해주세요.")
 
 def learning_style_assessment():
     st.title("학습 스타일 평가")
@@ -91,15 +98,17 @@ def learning_style_assessment():
                    "움직이거나 무언가를 만지작거린다"])
 
     if st.button("다음"):
-        if q1.startswith("그림") and q2.startswith("필기"):
-            learning_style = "시각적"
-        elif q1.startswith("설명") and q2.startswith("선생님"):
-            learning_style = "청각적"
-        else:
-            learning_style = "운동감각적"
+        if st.button("제출하시겠습니까?"):
+            if q1.startswith("그림") and q2.startswith("필기"):
+                learning_style = "시각적"
+            elif q1.startswith("설명") and q2.startswith("선생님"):
+                learning_style = "청각적"
+            else:
+                learning_style = "운동감각적"
 
-        st.session_state.student_data['learning_style'] = learning_style
-        st.session_state.page = 'mbti'
+            st.session_state.student_data['learning_style'] = learning_style
+            st.session_state.page = 'mbti'
+            st.rerun()
 
 def mbti_assessment():
     st.title("MBTI 성격 유형 검사")
@@ -111,9 +120,11 @@ def mbti_assessment():
     j_p = st.radio("4. 나는 주로:", ["계획을 세우고 그대로 실행한다 (J)", "상황에 따라 유연하게 대처한다 (P)"])
 
     if st.button("다음"):
-        mbti = (e_i[-2] + s_n[-2] + t_f[-2] + j_p[-2])
-        st.session_state.student_data['mbti_type'] = mbti
-        st.session_state.page = 'interests'
+        if st.button("제출하시겠습니까?"):
+            mbti = (e_i[-2] + s_n[-2] + t_f[-2] + j_p[-2])
+            st.session_state.student_data['mbti_type'] = mbti
+            st.session_state.page = 'interests'
+            st.rerun()
 
 def interests_assessment():
     st.title("관심사 조사")
@@ -131,11 +142,13 @@ def interests_assessment():
     st.session_state.interests = interests
 
     if st.button("다음"):
-        if interests:
-            st.session_state.student_data['interests'] = ", ".join(interests)
-            st.session_state.page = 'skills'
-        else:
-            st.warning("최소 하나의 관심사를 선택해주세요.")    
+        if st.button("제출하시겠습니까?"):
+            if interests:
+                st.session_state.student_data['interests'] = ", ".join(interests)
+                st.session_state.page = 'skills'
+                st.rerun()
+            else:
+                st.warning("최소 하나의 관심사를 선택해주세요.")    
 
 def skills_assessment():
     st.title("기술 평가")
@@ -145,9 +158,11 @@ def skills_assessment():
     digital_literacy = st.slider("1에서 5까지, 여러분의 디지털 기기 활용 능력을 어떻게 평가하시나요?", 1, 5, 3)
 
     if st.button("완료"):
-        st.session_state.student_data['collaboration_skill'] = collaboration
-        st.session_state.student_data['digital_literacy'] = digital_literacy
-        st.session_state.page = 'result'
+        if st.button("제출하시겠습니까?"):
+            st.session_state.student_data['collaboration_skill'] = collaboration
+            st.session_state.student_data['digital_literacy'] = digital_literacy
+            st.session_state.page = 'result'
+            st.rerun()
 
 def save_assessment_data():
     data = st.session_state.student_data
@@ -178,6 +193,7 @@ def result_page():
     if st.button("처음으로"):
         st.session_state.page = 'intro'
         st.session_state.student_data = {}
+        st.rerun()
 
 def verify_password(password):
     # 실제 구현에서는 보다 안전한 방법으로 비밀번호를 저장하고 검증해야 합니다
@@ -220,17 +236,18 @@ def individual_grade_input():
     score = st.number_input("점수", min_value=0, max_value=100, step=1)
 
     if st.button("성적 입력"):
-        if student_id and subject and score:
-            c.execute("SELECT * FROM students WHERE student_id = ?", (student_id,))
-            if c.fetchone():
-                c.execute("INSERT INTO grades (student_id, subject, score) VALUES (?, ?, ?)",
-                          (student_id, subject, score))
-                conn.commit()
-                st.success(f"{student_id} 학생의 {subject} 성적 {score}점이 입력되었습니다.")
+        if st.button("제출하시겠습니까?"):
+            if student_id and subject and score:
+                c.execute("SELECT * FROM students WHERE student_id = ?", (student_id,))
+                if c.fetchone():
+                    c.execute("INSERT INTO grades (student_id, subject, score) VALUES (?, ?, ?)",
+                              (student_id, subject, score))
+                    conn.commit()
+                    st.success(f"{student_id} 학생의 {subject} 성적 {score}점이 입력되었습니다.")
+                else:
+                    st.error("존재하지 않는 학생 ID입니다.")
             else:
-                st.error("존재하지 않는 학생 ID입니다.")
-        else:
-            st.error("모든 필드를 입력해주세요.")
+                st.error("모든 필드를 입력해주세요.")
 
 def csv_grade_upload():
     st.write("CSV 파일 형식:")
@@ -241,26 +258,27 @@ def csv_grade_upload():
 
     uploaded_file = st.file_uploader("CSV 파일을 업로드하세요", type="csv")
     if uploaded_file is not None:
-        try:
-            df = pd.read_csv(uploaded_file, header=0, names=['student_id', 'subject', 'score'])
-            
-            success_count = 0
-            error_count = 0
-            for _, row in df.iterrows():
-                c.execute("SELECT * FROM students WHERE student_id = ?", (row['student_id'],))
-                if c.fetchone():
-                    c.execute("INSERT INTO grades (student_id, subject, score) VALUES (?, ?, ?)",
-                              (row['student_id'], row['subject'], row['score']))
-                    success_count += 1
-                else:
-                    error_count += 1
+        if st.button("업로드하시겠습니까?"):
+            try:
+                df = pd.read_csv(uploaded_file, header=0, names=['student_id', 'subject', 'score'])
 
-            conn.commit()
-            st.success(f"{success_count}개의 성적이 성공적으로 입력되었습니다.")
-            if error_count > 0:
-                st.warning(f"{error_count}개의 성적은 존재하지 않는 학생 ID로 인해 입력되지 않았습니다.")
-        except Exception as e:
-            st.error(f"파일 처리 중 오류가 발생했습니다: {e}")
+                success_count = 0
+                error_count = 0
+                for _, row in df.iterrows():
+                    c.execute("SELECT * FROM students WHERE student_id = ?", (row['student_id'],))
+                    if c.fetchone():
+                        c.execute("INSERT INTO grades (student_id, subject, score) VALUES (?, ?, ?)",
+                                  (row['student_id'], row['subject'], row['score']))
+                        success_count += 1
+                    else:
+                        error_count += 1
+
+                conn.commit()
+                st.success(f"{success_count}개의 성적이 성공적으로 입력되었습니다.")
+                if error_count > 0:
+                    st.warning(f"{error_count}개의 성적은 존재하지 않는 학생 ID로 인해 입력되지 않았습니다.")
+            except Exception as e:
+                st.error(f"파일 처리 중 오류가 발생했습니다: {e}")
 
 def display_student_data():
     st.subheader("전체 학생 데이터")
