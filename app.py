@@ -45,8 +45,8 @@ def init_session_state():
         st.session_state.student_data = {}
     if 'admin_authenticated' not in st.session_state:
         st.session_state.admin_authenticated = False
-    if 'confirm_submit' not in st.session_state:
-        st.session_state.confirm_submit = False
+    if 'submit_clicked' not in st.session_state:
+        st.session_state.submit_clicked = False
 
 def generate_student_id(class_num, student_num):
     return f"1{class_num:02d}{student_num:02d}"
@@ -62,27 +62,30 @@ def intro_page():
 
     if st.button("시작하기"):
         if name and class_num and student_num:
-            if st.button("제출하시겠습니까?"):
-                student_id = generate_student_id(class_num, student_num)
-                st.session_state.student_data['student_id'] = student_id
-                st.session_state.student_data['name'] = name
-                st.session_state.student_data['class'] = class_num
-                st.session_state.student_data['number'] = student_num
-
-                c.execute("SELECT * FROM students WHERE student_id = ?", (student_id,))
-                existing_student = c.fetchone()
-
-                if existing_student:
-                    st.warning("이미 조사를 완료한 학생입니다. 기존 데이터를 업데이트합니다.")
-                    st.session_state.page = 'learning_style'
-                else:
-                    c.execute("INSERT INTO students (student_id, name, class, number) VALUES (?, ?, ?, ?)",
-                              (student_id, name, class_num, student_num))
-                    conn.commit()
-                    st.session_state.page = 'learning_style'
-                st.rerun()
+            st.session_state.submit_clicked = True
+            st.session_state.student_data['student_id'] = generate_student_id(class_num, student_num)
+            st.session_state.student_data['name'] = name
+            st.session_state.student_data['class'] = class_num
+            st.session_state.student_data['number'] = student_num
         else:
             st.warning("모든 필드를 입력해주세요.")
+
+    if st.session_state.submit_clicked:
+        if st.button("제출하시겠습니까?"):
+            c.execute("SELECT * FROM students WHERE student_id = ?", (st.session_state.student_data['student_id'],))
+            existing_student = c.fetchone()
+
+            if existing_student:
+                st.warning("이미 조사를 완료한 학생입니다. 기존 데이터를 업데이트합니다.")
+            else:
+                c.execute("INSERT INTO students (student_id, name, class, number) VALUES (?, ?, ?, ?)",
+                          (st.session_state.student_data['student_id'], st.session_state.student_data['name'],
+                           st.session_state.student_data['class'], st.session_state.student_data['number']))
+                conn.commit()
+            
+            st.session_state.page = 'learning_style'
+            st.session_state.submit_clicked = False
+            st.rerun()
 
 def learning_style_assessment():
     st.title("학습 스타일 평가")
@@ -98,16 +101,18 @@ def learning_style_assessment():
                    "움직이거나 무언가를 만지작거린다"])
 
     if st.button("다음"):
-        if st.button("제출하시겠습니까?"):
-            if q1.startswith("그림") and q2.startswith("필기"):
-                learning_style = "시각적"
-            elif q1.startswith("설명") and q2.startswith("선생님"):
-                learning_style = "청각적"
-            else:
-                learning_style = "운동감각적"
+        st.session_state.submit_clicked = True
+        if q1.startswith("그림") and q2.startswith("필기"):
+            st.session_state.student_data['learning_style'] = "시각적"
+        elif q1.startswith("설명") and q2.startswith("선생님"):
+            st.session_state.student_data['learning_style'] = "청각적"
+        else:
+            st.session_state.student_data['learning_style'] = "운동감각적"
 
-            st.session_state.student_data['learning_style'] = learning_style
+    if st.session_state.submit_clicked:
+        if st.button("제출하시겠습니까?"):
             st.session_state.page = 'mbti'
+            st.session_state.submit_clicked = False
             st.rerun()
 
 def mbti_assessment():
@@ -120,10 +125,13 @@ def mbti_assessment():
     j_p = st.radio("4. 나는 주로:", ["계획을 세우고 그대로 실행한다 (J)", "상황에 따라 유연하게 대처한다 (P)"])
 
     if st.button("다음"):
+        st.session_state.submit_clicked = True
+        st.session_state.student_data['mbti_type'] = (e_i[-2] + s_n[-2] + t_f[-2] + j_p[-2])
+
+    if st.session_state.submit_clicked:
         if st.button("제출하시겠습니까?"):
-            mbti = (e_i[-2] + s_n[-2] + t_f[-2] + j_p[-2])
-            st.session_state.student_data['mbti_type'] = mbti
             st.session_state.page = 'interests'
+            st.session_state.submit_clicked = False
             st.rerun()
 
 def interests_assessment():
@@ -142,13 +150,17 @@ def interests_assessment():
     st.session_state.interests = interests
 
     if st.button("다음"):
+        if interests:
+            st.session_state.submit_clicked = True
+            st.session_state.student_data['interests'] = ", ".join(interests)
+        else:
+            st.warning("최소 하나의 관심사를 선택해주세요.")
+
+    if st.session_state.submit_clicked:
         if st.button("제출하시겠습니까?"):
-            if interests:
-                st.session_state.student_data['interests'] = ", ".join(interests)
-                st.session_state.page = 'skills'
-                st.rerun()
-            else:
-                st.warning("최소 하나의 관심사를 선택해주세요.")    
+            st.session_state.page = 'skills'
+            st.session_state.submit_clicked = False
+            st.rerun()
 
 def skills_assessment():
     st.title("기술 평가")
@@ -158,10 +170,14 @@ def skills_assessment():
     digital_literacy = st.slider("1에서 5까지, 여러분의 디지털 기기 활용 능력을 어떻게 평가하시나요?", 1, 5, 3)
 
     if st.button("완료"):
+        st.session_state.submit_clicked = True
+        st.session_state.student_data['collaboration_skill'] = collaboration
+        st.session_state.student_data['digital_literacy'] = digital_literacy
+
+    if st.session_state.submit_clicked:
         if st.button("제출하시겠습니까?"):
-            st.session_state.student_data['collaboration_skill'] = collaboration
-            st.session_state.student_data['digital_literacy'] = digital_literacy
             st.session_state.page = 'result'
+            st.session_state.submit_clicked = False
             st.rerun()
 
 def save_assessment_data():
